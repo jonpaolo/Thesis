@@ -1,0 +1,148 @@
+import cv2
+import numpy as np
+import serial
+import time
+import threading
+from tkinter import *
+from PIL import Image, ImageTk
+
+serial_port = "COM3"
+baud_rate = 115200
+
+ser = serial.Serial(serial_port, baud_rate) 
+
+def StandByModeButton():
+    button_label = Label(f2, text="Stand By Mode", compound="c", font=("Arial", 16), bg="white", fg="black")
+    button_label.pack(pady=20, side = BOTTOM)
+
+    # Associate the button with the button_clicked function
+    button_label.bind("<Button-1>", lambda e: button_clicked1(button_label))
+
+def ForwardButton():
+    button_label = Label(f2, text="Forward", compound="c", font=("Arial", 16), bg="white", fg="black")
+    button_label.pack(pady = 500, side =TOP)
+    button_label.bind("<Button-2>", lambda e: button_clicked2(button_label))
+
+def TleftButton():
+    button_label = Label(f2, text="Left", compound="c", font=("Arial", 16), bg="white", fg="black")
+    button_label.pack(pady = 500, side = LEFT)
+    button_label.bind("<Button-3>", lambda e: button_clicked2(button_label))
+
+def TrightButton():
+    button_label = Label(f2, text="Right", compound="c", font=("Arial", 16), bg="white", fg="black")
+    button_label.pack(pady = 500, side = RIGHT)
+    button_label.bind("<Button-4>", lambda e: button_clicked2(button_label))
+
+# Function to be called to switch modes
+def button_clicked1(button1):
+    global mode
+    if mode == "Stand By Mode":
+        mode = "Driving Mode"
+        button1.config(text=mode)
+        ser.write("On".encode())
+    else:  # mode is "Driving Mode"
+        mode = "Stand By Mode"
+        button1.config(text=mode)
+        ser.write("Off".encode())
+    print("Button clicked! Current mode:", mode)
+
+#Function to be called for forward movement
+def button_clicked2(button2):
+    speed = ser.readline()                      #Read Data from Serial Port
+    intspeed = speed[49]
+    if intspeed <= 5:
+        while intspeed <= 5:                    
+            speedloop = speedloop + 1
+            time.sleep(0.5)
+            ser.write("PWM, " + str(speedloop))
+
+# Create the root window
+root = Tk()
+root.geometry("1280x720")  # Set the dimensions of the GUI window
+
+# Create a frame for the camera grid
+f1 = LabelFrame(root)
+f1.pack()
+
+# Create a label for the camera feed
+L1 = Label(f1)
+L1.pack()
+
+# Create a frame for the Standy by/ Driving mode button
+f2 = Frame(root, bg="white")
+f2.pack()
+
+# Create transparent box buttons with text labels
+StandByModeButton()
+
+
+root.configure(bg="white")
+cap = cv2.VideoCapture(0)
+
+new_width = 1080  # Define the desired width for the captured frame
+new_height = 720  # Define the desired height for the captured frame
+
+mode = "Stand By Mode"  # Initialize the mode
+
+while True:
+    ret = False
+    if mode in ["Driving Mode", "Forward"]:  # Check if the mode is "Driving Mode" or "Forward"
+        ret, frame = cap.read()
+        ForwardButton()
+        TleftButton()
+        TrightButton()
+    if ret:
+        # Resize the frame to the desired dimensions
+        frame = cv2.resize(frame, (new_width, new_height))
+        frame_rgb = cv2.cvtColor(frame, cv2.COLOR_BGR2RGB)
+        img = ImageTk.PhotoImage(Image.fromarray(frame_rgb))
+        L1['image'] = img
+    root.update()
+
+    if mode in ["Stand By Mode"]:  # Check if the mode is "Stand By Mode"
+        L1.pack_forget()  # Hide the camera feed if in "Stand By Mode"
+    else:
+        L1.pack()  # Show the camera feed if in "Driving Mode" or "Forward"
+
+# Set the desired dimensions for the captured frame
+new_width = 1080
+new_height = 720
+
+mode = "Stand By Mode"  # Initialize the mode
+
+# Define the on_closing function before binding it
+def on_closing():
+    # Close the serial connection when exiting the application
+    ser.close()
+    root.destroy()
+
+# Bind the exit button to on_closing
+root.protocol("WM_DELETE_WINDOW", on_closing)
+def read_serial():
+    while True:
+        try:
+            data = ser.readline().decode().strip()  # Read and decode data from the serial port
+            print("Arduino Output:", data)  # Print the received data to the terminal
+        except Exception as e:
+            print("Error reading from serial port:", e)
+
+# Create a separate thread for reading serial data
+serial_thread = threading.Thread(target=read_serial, daemon=True)
+serial_thread.start()
+
+while True:
+    ret, frame = cap.read()
+    if ret:
+        # Resize the frame to the desired dimensions
+        frame = cv2.resize(frame, (new_width, new_height))
+
+        # Convert the frame to RGB and create an ImageTk object
+        frame_rgb = cv2.cvtColor(frame, cv2.COLOR_BGR2RGB)
+        img = ImageTk.PhotoImage(Image.fromarray(frame_rgb))
+
+        # Update the image in the label and refresh the GUI window
+        L1['image'] = img
+        root.update()
+
+cap.release()
+cv2.destroyAllWindows()
